@@ -74,18 +74,20 @@ const fixAttribute = (realAttribute) => {
 
     probablyInvalid || console.log('probably unhandled key', key);
 
-    key = 'invalid';
+    key = `INVALID_${key}`;
   }
   return key;
 };
 
 const convert = async function () {
-  const files = await fs.readdir('./data');
+  const files = (await fs.readdir('input')).filter((fileName) => fileName.endsWith('.yaml'));
+
+  await fs.mkdir('output').catch(() => {});
 
   const allEffectKeys = new Set();
 
   for (const fileName of files) {
-    const fileData = await fs.readFile(`./data/${fileName}`);
+    const fileData = await fs.readFile(`input/${fileName}`);
     const data = yaml.load(fileData);
 
     const result = [];
@@ -97,8 +99,10 @@ const convert = async function () {
           subText,
           modifiers: { damage, attributes, conversion, conversionAfterBuffs, ...otherModifiers },
           gw2id,
-          // eslint-disable-next-line no-unused-vars
+          /* eslint-disable no-unused-vars */
           displayIds,
+          textOverride,
+          /* eslint-enable no-unused-vars */
           ...rest
         } = item;
 
@@ -124,7 +128,12 @@ const convert = async function () {
             if (Array.isArray(value)) {
               const allPairsMut = [...value];
               while (allPairsMut.length) {
-                const [amount, mode] = allPairsMut.splice(0, 2);
+                const [realAmount, mode] = allPairsMut.splice(0, 2);
+
+                const amount =
+                  typeof realAmount === 'string' && realAmount.includes('%')
+                    ? Number(realAmount.replace('%', '')) / 100
+                    : realAmount;
 
                 switch (mode) {
                   case 'converted':
@@ -144,7 +153,14 @@ const convert = async function () {
                 }
               }
             } else {
-              const result = { attribute: key, addend: value };
+              const realAmount = value;
+
+              const amount =
+                typeof realAmount === 'string' && realAmount.includes('%')
+                  ? Number(realAmount.replace('%', '')) / 100
+                  : realAmount;
+
+              const result = { attribute: key, addend: amount };
 
               attribute_modifiers.push(result);
             }
@@ -154,10 +170,13 @@ const convert = async function () {
           Object.entries(conversion).forEach(([realKey, value]) => {
             let key = fixAttribute(realKey);
 
-            Object.entries(value).forEach(([realSource, amountPercent]) => {
+            Object.entries(value).forEach(([realSource, realAmount]) => {
               const source = fixAttribute(realSource);
 
-              const amount = Number(amountPercent.replace('%', '')) / 100;
+              const amount =
+                typeof realAmount === 'string' && realAmount.includes('%')
+                  ? Number(realAmount.replace('%', '')) / 100
+                  : realAmount;
 
               attribute_conversions.push({
                 from: source,
@@ -174,7 +193,12 @@ const convert = async function () {
 
             const allPairsMut = [...value];
             while (allPairsMut.length) {
-              const [amount, mode] = allPairsMut.splice(0, 2);
+              const [realAmount, mode] = allPairsMut.splice(0, 2);
+
+              const amount =
+                typeof realAmount === 'string' && realAmount.includes('%')
+                  ? Number(realAmount.replace('%', '')) / 100
+                  : realAmount;
 
               switch (mode) {
                 case 'mult':
@@ -217,15 +241,20 @@ const convert = async function () {
         // max_duration,
         // stacking_type
 
+        const NOT_IMPLEMENTED = { ...rest };
+        if (NOT_IMPLEMENTED.priceIds && NOT_IMPLEMENTED.priceIds.length === 0) {
+          delete NOT_IMPLEMENTED.priceIds;
+        }
+
         const convertedItem = {
           unique_effect_key,
           gw2_id: gw2id,
           ...(attribute_modifiers.length ? { attribute_modifiers } : {}),
           ...(attribute_conversions.length ? { attribute_conversions } : {}),
 
-          ...(exists(rest) ? { NOT_IMPLEMENTED_YET: { ...rest } } : {}),
+          ...(exists(NOT_IMPLEMENTED) ? { NOT_IMPLEMENTED } : {}),
           ...(exists(conversionAfterBuffs)
-            ? { ALSO_NOT_IMPLEMENTED_YET: { conversionAfterBuffs } }
+            ? { ALSO_NOT_IMPLEMENTED: { conversionAfterBuffs } }
             : {}),
         };
 
@@ -236,7 +265,7 @@ const convert = async function () {
     const resultData = JSON.stringify(result, null, 2);
 
     // console.log(resultData /* .slice(0, 300) */, '\n');
-    fs.writeFile(`./data2/${fileName}.json`, resultData, {
+    fs.writeFile(`output/${fileName}.json`, resultData, {
       encoding: 'utf8',
       flag: 'w+',
     });

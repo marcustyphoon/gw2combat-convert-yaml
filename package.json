@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "convert": "node src/convert.js",
     "test": "npm run eslint && npm run prettier",
     "eslint": "eslint src --ext js,jsx",
     "prettier": "prettier src --check"
