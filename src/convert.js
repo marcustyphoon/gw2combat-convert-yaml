@@ -100,8 +100,10 @@ const convert = async function () {
           modifiers: { damage, attributes, conversion, conversionAfterBuffs, ...otherModifiers },
           gw2id,
           /* eslint-disable no-unused-vars */
+          wvwModifiers,
           displayIds,
           textOverride,
+          defaultEnabled,
           /* eslint-enable no-unused-vars */
           ...rest
         } = item;
@@ -148,6 +150,16 @@ const convert = async function () {
                     });
                     break;
 
+                  case 'unknown':
+                    attribute_conversions.push({
+                      from: key,
+                      to: key,
+                      multiplier: 0,
+                      addend: amount,
+                      UNCONFIRMED_ADD_OR_MULT: true,
+                    });
+                    break;
+
                   default:
                     console.log([id, key, value]);
                 }
@@ -189,7 +201,18 @@ const convert = async function () {
 
         damage &&
           Object.entries(damage).forEach(([realKey, value]) => {
-            const key = fixAttribute(`outgoing_${realKey}`);
+            //
+            const key = fixAttribute(
+              [
+                'Bleeding Damage',
+                'Burning Damage',
+                'Confusion Damage',
+                'Poison Damage',
+                'Torment Damage',
+              ].includes(realKey)
+                ? realKey
+                : `outgoing_${realKey}`,
+            );
 
             const allPairsMut = [...value];
             while (allPairsMut.length) {
@@ -246,6 +269,8 @@ const convert = async function () {
           delete NOT_IMPLEMENTED.priceIds;
         }
 
+        // exists(NOT_IMPLEMENTED) && console.log(Object.keys(NOT_IMPLEMENTED));
+
         const convertedItem = {
           unique_effect_key,
           gw2_id: gw2id,
@@ -265,7 +290,7 @@ const convert = async function () {
     const resultData = JSON.stringify(result, null, 2);
 
     // console.log(resultData /* .slice(0, 300) */, '\n');
-    fs.writeFile(`output/${fileName}.json`, resultData, {
+    fs.writeFile(`output/${fileName.replace('.yaml', '')}.json`, resultData, {
       encoding: 'utf8',
       flag: 'w+',
     });
