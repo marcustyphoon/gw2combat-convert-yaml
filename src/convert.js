@@ -1,11 +1,10 @@
-/* eslint-disable no-unused-vars */
 import fs from 'fs/promises';
 import yaml from 'js-yaml';
 
-const exists = (object) => Boolean(Object.keys(object).length);
+const exists = (object) => object && Boolean(Object.keys(object).length);
 const toLowerSnakeCaseAttr = (str) => str.replaceAll(' ', '_').toLowerCase();
 
-const validKeys = [
+const validAttributes = [
   'invalid',
 
   'power',
@@ -62,6 +61,24 @@ const validKeys = [
   'incoming_condition_damage_multiplier_add_group',
 ];
 
+const fixAttribute = (realAttribute) => {
+  let key = toLowerSnakeCaseAttr(realAttribute);
+
+  if (!validAttributes.includes(key) && validAttributes.includes(`${key}_multiplier`))
+    key = `${key}_multiplier`;
+
+  if (!validAttributes.includes(key)) {
+    const probablyInvalid =
+      key.includes('coefficient') ||
+      ['outgoing_damage_reduction', 'maximum_health', 'outgoing_healing', 'flat_dps'].includes(key);
+
+    probablyInvalid || console.log('probably unhandled key', key);
+
+    key = 'invalid';
+  }
+  return key;
+};
+
 const convert = async function () {
   const files = await fs.readdir('./data');
 
@@ -80,6 +97,7 @@ const convert = async function () {
           subText,
           modifiers: { damage, attributes, conversion, conversionAfterBuffs, ...otherModifiers },
           gw2id,
+          // eslint-disable-next-line no-unused-vars
           displayIds,
           ...rest
         } = item;
@@ -101,43 +119,82 @@ const convert = async function () {
 
         attributes &&
           Object.entries(attributes).forEach(([realKey, value]) => {
-            let key = toLowerSnakeCaseAttr(realKey);
-
-            const fixedKey = [];
-
-            if (!validKeys.includes(key) && validKeys.includes(`${key}_multiplier`))
-              key = `${key}_multiplier`;
-
-            if (!validKeys.includes(key)) {
-              // console.log(`invalid key`, key);
-              key = 'invalid';
-            }
+            const key = fixAttribute(realKey);
 
             if (Array.isArray(value)) {
-              const [amount, mode, amount2, mode2] = value;
+              const allPairsMut = [...value];
+              while (allPairsMut.length) {
+                const [amount, mode] = allPairsMut.splice(0, 2);
 
-              amount2 && console.log(amount2);
+                switch (mode) {
+                  case 'converted':
+                    attribute_modifiers.push({ attribute: key, addend: amount });
+                    break;
+                  case 'buff':
+                    attribute_conversions.push({
+                      from: key,
+                      to: key,
+                      multiplier: 0,
+                      addend: amount,
+                    });
+                    break;
 
-              switch (mode) {
-                case 'converted':
-                  attribute_modifiers.push({ attribute: key, addend: amount });
-                  break;
-                case 'buff':
-                  attribute_conversions.push({
-                    from: key,
-                    to: key,
-                    multiplier: 0,
-                    addend: amount,
-                  });
-                  break;
-
-                default:
-                  console.log([id, key, value]);
+                  default:
+                    console.log([id, key, value]);
+                }
               }
             } else {
               const result = { attribute: key, addend: value };
 
               attribute_modifiers.push(result);
+            }
+          });
+
+        conversion &&
+          Object.entries(conversion).forEach(([realKey, value]) => {
+            let key = fixAttribute(realKey);
+
+            Object.entries(value).forEach(([realSource, amountPercent]) => {
+              const source = fixAttribute(realSource);
+
+              const amount = Number(amountPercent.replace('%', '')) / 100;
+
+              attribute_conversions.push({
+                from: source,
+                to: key,
+                multiplier: amount,
+                addend: 0,
+              });
+            });
+          });
+
+        damage &&
+          Object.entries(damage).forEach(([realKey, value]) => {
+            const key = fixAttribute(`outgoing_${realKey}`);
+
+            const allPairsMut = [...value];
+            while (allPairsMut.length) {
+              const [amount, mode] = allPairsMut.splice(0, 2);
+
+              switch (mode) {
+                case 'mult':
+                  attribute_modifiers.push({ attribute: key, addend: amount });
+                  break;
+                case 'unknown':
+                  attribute_modifiers.push({
+                    attribute: key,
+                    addend: amount,
+                    UNCONFIRMED_ADD_OR_MULT: true,
+                  });
+                  break;
+                case 'add':
+                  attribute_modifiers.push({ attribute: `${key}_add_group`, addend: amount });
+
+                  break;
+
+                default:
+                  console.log([id, key, value]);
+              }
             }
           });
 
@@ -167,6 +224,9 @@ const convert = async function () {
           ...(attribute_conversions.length ? { attribute_conversions } : {}),
 
           ...(exists(rest) ? { NOT_IMPLEMENTED_YET: { ...rest } } : {}),
+          ...(exists(conversionAfterBuffs)
+            ? { ALSO_NOT_IMPLEMENTED_YET: { conversionAfterBuffs } }
+            : {}),
         };
 
         result.push(convertedItem);
