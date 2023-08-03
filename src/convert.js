@@ -79,7 +79,7 @@ const fixAttribute = (realAttribute) => {
   return key;
 };
 
-const convert = async function () {
+const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
   const files = (await fs.readdir('input')).filter((fileName) => fileName.endsWith('.yaml'));
 
   await fs.mkdir('output').catch(() => {});
@@ -110,7 +110,7 @@ const convert = async function () {
 
         exists(otherModifiers) && console.log(otherModifiers);
 
-        let unique_effect_key = [text, subText].filter(Boolean).join(' ');
+        let unique_effect_key = [text, subText].filter(Boolean).join(' ').replaceAll('/', '-');
 
         if (allEffectKeys.has(unique_effect_key)) {
           let count = 2;
@@ -287,17 +287,41 @@ const convert = async function () {
       });
     });
 
-    const resultData = JSON.stringify(result, null, 2);
+    if (outputSingleFiles) {
+      const resultData = JSON.stringify(result, null, 2);
 
-    // console.log(resultData /* .slice(0, 300) */, '\n');
-    fs.writeFile(`output/${fileName.replace('.yaml', '')}.json`, resultData, {
-      encoding: 'utf8',
-      flag: 'w+',
-    });
+      // console.log(resultData /* .slice(0, 300) */, '\n');
+      fs.writeFile(`output/${fileName.replace('.yaml', '')}.json`, resultData, {
+        encoding: 'utf8',
+        flag: 'w+',
+      });
+    }
+
+    if (outputMultipleFiles) {
+      const dir = `output/${fileName.replace('.yaml', '')}`;
+      await fs.mkdir(dir).catch(() => {});
+
+      result.forEach((permanentUniqueEffect) => {
+        const data = {
+          'counters': [],
+          'permanent_effects': [],
+          'permanent_unique_effects': [permanentUniqueEffect],
+          'skills': [],
+        };
+
+        const resultData = JSON.stringify(data, null, 2);
+
+        // console.log(resultData /* .slice(0, 300) */, '\n');
+        fs.writeFile(`${dir}/${permanentUniqueEffect.unique_effect_key}.json`, resultData, {
+          encoding: 'utf8',
+          flag: 'w+',
+        });
+      });
+    }
   }
 };
 
-convert();
+convert({ outputSingleFiles: true, outputMultipleFiles: true });
 
 /*
 const keyConversion = {
