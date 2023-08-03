@@ -79,6 +79,30 @@ const fixAttribute = (realAttribute) => {
   return key;
 };
 
+const lifestealSkill = {
+  NOTE: 'This is a hardcoded skill name. Change only flat_damage and nothing else based on traits',
+  skill_key: 'Lifesteal Proc',
+  weapon_type: 'empty_handed',
+  flat_damage: 325,
+  cast_duration: [0, 0],
+  strike_on_tick_list: [[0], [0]],
+  cooldown: [2000, 2000],
+  can_critical_strike: false,
+};
+
+const lifestealSkillTrigger = {
+  condition: {
+    threshold: {
+      threshold_type: 'upper_bound_exclusive',
+      threshold_value: 66,
+      generate_random_number_subject_to_threshold: true,
+    },
+    only_applies_on_strikes: true,
+    depends_on_skill_off_cooldown: 'Lifesteal Proc',
+  },
+  skill_key: 'Lifesteal Proc',
+};
+
 const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
   const files = (await fs.readdir('input')).filter((fileName) => fileName.endsWith('.yaml'));
 
@@ -90,7 +114,7 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
     const fileData = await fs.readFile(`input/${fileName}`);
     const data = yaml.load(fileData);
 
-    const result = [];
+    const result = {};
     data.forEach(({ items }) => {
       items.forEach((item) => {
         const {
@@ -99,6 +123,7 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
           subText,
           modifiers: { damage, attributes, conversion, conversionAfterBuffs, ...otherModifiers },
           gw2id,
+          hasLifesteal,
           /* eslint-disable no-unused-vars */
           wvwModifiers,
           displayIds,
@@ -110,7 +135,11 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
 
         exists(otherModifiers) && console.log(otherModifiers);
 
-        let unique_effect_key = [text, subText].filter(Boolean).join(' ').replaceAll('/', '-');
+        let unique_effect_key = [text, subText]
+          .filter(Boolean)
+          .join(' ')
+          .replaceAll('/', '-')
+          .replaceAll(/ \(100%.*\)/g, '');
 
         if (allEffectKeys.has(unique_effect_key)) {
           let count = 2;
@@ -271,11 +300,13 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
 
         // exists(NOT_IMPLEMENTED) && console.log(Object.keys(NOT_IMPLEMENTED));
 
-        const convertedItem = {
+        const permanentUniqueEffect = {
           unique_effect_key,
           gw2_id: gw2id,
           ...(attribute_modifiers.length ? { attribute_modifiers } : {}),
           ...(attribute_conversions.length ? { attribute_conversions } : {}),
+
+          ...(hasLifesteal ? { skill_triggers: [lifestealSkillTrigger] } : {}),
 
           ...(exists(NOT_IMPLEMENTED) ? { NOT_IMPLEMENTED } : {}),
           ...(exists(conversionAfterBuffs)
@@ -283,12 +314,19 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
             : {}),
         };
 
-        result.push(convertedItem);
+        const data = {
+          counters: [],
+          permanent_effects: [],
+          permanent_unique_effects: [permanentUniqueEffect],
+          skills: hasLifesteal ? [lifestealSkill] : [],
+        };
+
+        result[unique_effect_key] = data;
       });
     });
 
     if (outputSingleFiles) {
-      const resultData = JSON.stringify(result, null, 2);
+      const resultData = JSON.stringify(Object.values(result), null, 2);
 
       // console.log(resultData /* .slice(0, 300) */, '\n');
       fs.writeFile(`output/${fileName.replace('.yaml', '')}.json`, resultData, {
@@ -301,18 +339,11 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
       const dir = `output/${fileName.replace('.yaml', '')}`;
       await fs.mkdir(dir).catch(() => {});
 
-      result.forEach((permanentUniqueEffect) => {
-        const data = {
-          'counters': [],
-          'permanent_effects': [],
-          'permanent_unique_effects': [permanentUniqueEffect],
-          'skills': [],
-        };
-
-        const resultData = JSON.stringify(data, null, 2);
+      Object.entries(result).forEach(([key, value]) => {
+        const entryData = JSON.stringify(value, null, 2);
 
         // console.log(resultData /* .slice(0, 300) */, '\n');
-        fs.writeFile(`${dir}/${permanentUniqueEffect.unique_effect_key}.json`, resultData, {
+        fs.writeFile(`${dir}/${key}.json`, entryData, {
           encoding: 'utf8',
           flag: 'w+',
         });
