@@ -43,7 +43,7 @@ const validAttributes = [
   'poison_duration_multiplier',
   'torment_duration_multiplier',
 
-  'condition_damage_multiplier',
+  // 'condition_damage_multiplier',
   'burning_damage_multiplier',
   'bleeding_damage_multiplier',
   'confusion_damage_multiplier',
