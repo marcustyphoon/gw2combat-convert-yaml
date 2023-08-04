@@ -103,6 +103,18 @@ const lifestealSkillTrigger = {
   skill_key: 'Lifesteal Proc',
 };
 
+const professionFiles = [
+  'warrior',
+  'revenant',
+  'guardian',
+  'ranger',
+  'engineer',
+  'elementalist',
+  'mesmer',
+  'necromancer',
+  'thief',
+].map((str) => `${str}.yaml`);
+
 const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
   const files = (await fs.readdir('input')).filter((fileName) => fileName.endsWith('.yaml'));
 
@@ -115,7 +127,9 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
     const data = yaml.load(fileData);
 
     const result = {};
-    data.forEach(({ items }) => {
+    data.forEach(({ section, items }) => {
+      const isTraitOrSkill = professionFiles.includes(fileName);
+      const isSkill = section === 'Skills';
       items.forEach((item) => {
         const {
           id,
@@ -129,11 +143,20 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
           displayIds,
           textOverride,
           defaultEnabled,
+          amountData,
           /* eslint-enable no-unused-vars */
           ...rest
         } = item;
 
         exists(otherModifiers) && console.log(otherModifiers);
+
+        const maybeCondition = amountData
+          ? {
+              condition: {
+                note: `NOT_IMPLEMENTED (${JSON.stringify(amountData).replaceAll('"', "'")})`,
+              },
+            }
+          : {};
 
         let unique_effect_key = [text, subText]
           .filter(Boolean)
@@ -168,7 +191,7 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
 
                 switch (mode) {
                   case 'converted':
-                    attribute_modifiers.push({ attribute: key, addend: amount });
+                    attribute_modifiers.push({ attribute: key, addend: amount, ...maybeCondition });
                     break;
                   case 'buff':
                     attribute_conversions.push({
@@ -176,6 +199,7 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
                       to: key,
                       multiplier: 0,
                       addend: amount,
+                      ...maybeCondition,
                     });
                     break;
 
@@ -185,6 +209,7 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
                       to: key,
                       multiplier: 0,
                       addend: amount,
+                      ...maybeCondition,
                       UNCONFIRMED_ADD_OR_MULT: true,
                     });
                     break;
@@ -201,7 +226,7 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
                   ? Number(realAmount.replace('%', '')) / 100
                   : realAmount;
 
-              const result = { attribute: key, addend: amount };
+              const result = { attribute: key, addend: amount, ...maybeCondition };
 
               attribute_modifiers.push(result);
             }
@@ -224,6 +249,7 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
                 to: key,
                 multiplier: amount,
                 addend: 0,
+                ...maybeCondition,
               });
             });
           });
@@ -254,17 +280,22 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
 
               switch (mode) {
                 case 'mult':
-                  attribute_modifiers.push({ attribute: key, addend: amount });
+                  attribute_modifiers.push({ attribute: key, addend: amount, ...maybeCondition });
                   break;
                 case 'unknown':
                   attribute_modifiers.push({
                     attribute: key,
                     addend: amount,
+                    ...maybeCondition,
                     UNCONFIRMED_ADD_OR_MULT: true,
                   });
                   break;
                 case 'add':
-                  attribute_modifiers.push({ attribute: `${key}_add_group`, addend: amount });
+                  attribute_modifiers.push({
+                    attribute: `${key}_add_group`,
+                    addend: amount,
+                    ...maybeCondition,
+                  });
 
                   break;
 
@@ -314,14 +345,23 @@ const convert = async function ({ outputSingleFiles, outputMultipleFiles }) {
             : {}),
         };
 
+        let key = unique_effect_key;
+
+        if (isTraitOrSkill) {
+          key = isSkill ? `skill_${gw2id}` : `trait_${gw2id}`;
+        }
+
         const data = {
           counters: [],
           permanent_effects: [],
-          permanent_unique_effects: [permanentUniqueEffect],
-          skills: hasLifesteal ? [lifestealSkill] : [],
+          permanent_unique_effects: [],
+          skills: [],
         };
 
-        result[unique_effect_key] = data;
+        result[key] ??= data;
+
+        result[key].permanent_unique_effects.push(permanentUniqueEffect);
+        if (hasLifesteal) result[key].skills.push(lifestealSkill);
       });
     });
 
