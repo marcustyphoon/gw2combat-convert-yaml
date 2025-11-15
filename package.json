@@ -11,7 +11,7 @@
     "prettier": "^3.0.0"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.1"
   },
   "type": "module"
 }
