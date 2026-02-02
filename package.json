@@ -6,9 +6,9 @@
     "prettier": "prettier src --check"
   },
   "devDependencies": {
-    "eslint": "^8.45.0",
-    "eslint-config-prettier": "^8.8.0",
-    "prettier": "^3.0.0"
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1"
   },
   "dependencies": {
     "js-yaml": "^4.1.1"
